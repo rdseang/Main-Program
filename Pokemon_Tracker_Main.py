@@ -1,10 +1,6 @@
 from PIL import Image
 import zmq
 import json
-import time
-import timeit
-
-#/Users/ryan/PyCharmProjects/CS361_Pokemon_Card_Tracker/ryansoybean.json
 
 # setup zmq environment for client
 # connects to filter microservice made by classmate
@@ -33,7 +29,7 @@ class PokemonTracker:
     def __init__(self, username, collections=[]):
         self._username = username
         self._collections = collections
-        #self._path_json = f'/Users/ryan/PycharmProjects/CS361_Pokemon_Card_Tracker/{username}.json'
+
     def get_data_microservice(self, username):
         """
         Calls the data_microservice to get data
@@ -41,7 +37,6 @@ class PokemonTracker:
         """
 
         # send message to microservice to get data
-        #socket_2.send_string(f"data {self._username}")
         socket_2.send_json(('data', username))
 
         # decode message received in json format
@@ -61,10 +56,7 @@ class PokemonTracker:
     def homepage(self):
         """
         The homepage for the pokemon tracker object
-        :return:.
         """
-
-        # need to code this so it only shows options the first time
 
         # loop input until valid input
         is_valid = False
@@ -89,13 +81,11 @@ class PokemonTracker:
             if action == 'V' or action == 'v':
                 self.view_collections()
                 count = 0
-                #is_valid = True
 
             # add a card
             elif action == '+':
                 self.add_card_screen()
                 count = 0
-                #is_valid = True
 
             elif action == 'F' or action =='f':
                 self.filter_card_screen(self._username)
@@ -140,7 +130,6 @@ class PokemonTracker:
             if count == 0:
 
                 print()
-                # call [COLLECTION] microservice here to retrieve collection info
                 print('[COLLECTIONS]--------------------------------------\n')
 
                 # display all collections
@@ -159,7 +148,6 @@ class PokemonTracker:
                 is_valid = True
                 return  # goes back to the homepage
 
-            # call [COLLECTION] microservice here to actually delete the collection from json
             elif action == 'D' or action == 'd':
                 action_delete = input("Which would you like to delete? ")
                 for collection in self._collections:
@@ -178,7 +166,7 @@ class PokemonTracker:
                             print('Collection not removed')
                             count = 1
 
-            # go into the collection to view # call [COLLECTION] microservice to return info to view the selection
+
             else:
                 for collection in self._collections:
                     if action == collection["collection_name"]:
@@ -191,7 +179,7 @@ class PokemonTracker:
 
 
 
-    def view_single_collection(self, collection):  # will call microservice for this
+    def view_single_collection(self, collection):  
         '''
         allows a user to view the cards in a single selection
         :param collection: an object with the collection name, and a list of card objects
@@ -205,6 +193,7 @@ class PokemonTracker:
             if count == 0:
                 print(f'\n[{collection["collection_name"]}]-----------------------------------\n')
                 card_list = collection["card_list"]
+                
                 # iterate through and print all the card names
                 for i in range(len(card_list)):
                     print(f'({i+1}) {card_list[i]["card_name"]}')
@@ -222,7 +211,7 @@ class PokemonTracker:
             sub_card_list = []
             show_card = None
 
-            for card in card_list: # what about multiple cards with same name?? make a smaller list and choose one YEAH!!!
+            for card in card_list: # multiple cards with same name, make a smaller list and choose one
                 if action == card["card_name"]:
                     card_count += 1
                     if card_count == 1:
@@ -319,7 +308,6 @@ class PokemonTracker:
                     except IOError:
                         print("Image not found!")
 
-                # allow user to stay on this page so is_valid stays false to continue loop
 
             # return to the collection
             elif action == 'C' or action == 'c':
@@ -339,13 +327,11 @@ class PokemonTracker:
 
                     print('Card deleted')
                     go_back = True
-                    #is_valid = True
                     return go_back # go back to view collection function
                 else:
                     continue
 
             elif action == 'H' or action == 'h':
-                #is_valid = True
                 return action # go back home
 
             # edit card info
@@ -428,7 +414,6 @@ class PokemonTracker:
         }
         return new_card
 
-# handles the edit card
 
     def edit_card(self, card):
         '''
