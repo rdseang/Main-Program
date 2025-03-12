@@ -4,7 +4,6 @@ Handles the data writing and reading to the user's json file
 
 import zmq
 import json
-import time
 
 # make connection to main program
 context = zmq.Context()
@@ -31,20 +30,18 @@ def write_data(message):
 
     username, update = message[1], message[2]
     with open(f'{username}.json', 'w') as file:
-        # json.dump(update, file)
         file.write(json.dumps(update, indent=4))
 
 while True:
 
     message = socket.recv_json()
-    # message = message.decode()
-
+    
     print("Receiving Message")
     print(message)
 
     if message[0] == 'data':
         username = message[1]
-        # time.sleep(3)
+
         data = get_data(username)
         socket.send_json(data)
 
