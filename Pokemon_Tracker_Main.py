@@ -1,18 +1,68 @@
 from PIL import Image
+import zmq
 import json
+import time
 import timeit
+
+#/Users/ryan/PyCharmProjects/CS361_Pokemon_Card_Tracker/ryansoybean.json
+
+# setup zmq environment for client
+# connects to filter microservice made by classmate
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+socket.connect("tcp://localhost:5555")
+
+# connects to data_microservice
+context_2 = zmq.Context()
+socket_2 = context_2.socket(zmq.REQ)
+socket_2.connect("tcp://localhost:5020")
+
+# connects to user_microservice
+context_3 = zmq.Context()
+socket_3 = context_2.socket(zmq.REQ)
+socket_3.connect("tcp://localhost:5100")
+
+# connects to trading_microservice
+context_4 = zmq.Context()
+socket_4 = context_4.socket(zmq.REQ)
+socket_4.connect("tcp://localhost:5200")
+
+
 class PokemonTracker:
 
-    # the default [] just for now
     def __init__(self, username, collections=[]):
         self._username = username
-        self._collections = collections     # this will be nothing for now
+        self._collections = collections
+        #self._path_json = f'/Users/ryan/PycharmProjects/CS361_Pokemon_Card_Tracker/{username}.json'
+    def get_data_microservice(self, username):
+        """
+        Calls the data_microservice to get data
+        :return: the list of collections in the user json file
+        """
+
+        # send message to microservice to get data
+        #socket_2.send_string(f"data {self._username}")
+        socket_2.send_json(('data', username))
+
+        # decode message received in json format
+        list_collections = socket_2.recv_json()
+        return list_collections
+
+    def update_data_microservice(self, username, update):
+        """
+        Calls the data microservice to update data
+        :return: None
+        """
+        # send message to microservice to update data
+        socket_2.send_json(('update', username, update))
+        message = socket_2.recv()           # don't really do anything with this...just needs a response
+
 
     def homepage(self):
-        '''
+        """
         The homepage for the pokemon tracker object
         :return:.
-        '''
+        """
 
         # need to code this so it only shows options the first time
 
@@ -24,39 +74,38 @@ class PokemonTracker:
         while is_valid is False:
             if count == 0:
                 print()
-                print("[HOMEPAGE]\n")
+                print("[HOMEPAGE]-------------------------------------------\n")
                 print("Options:\n"
                     "'V' to VIEW Collections\n"
                     "'+' to ADD a card \n"
-                    #"'E' to EDIT a card's info\n"
-                    "'++' to ADD a new collection (Group your cards to organize them!\n"
+                    "'F' to view cards by FILTER parameter\n"
+                    "'>> to TRADE cards with another user\n"
+                    "'++' to ADD a new collection (Group your cards to organize them!)\n"
                     "'Q' to QUIT\n")
                 count = 1
 
             # view collections
             action = input("What would you like to do? ")
             if action == 'V' or action == 'v':
-                print('view collections')
                 self.view_collections()
                 count = 0
                 #is_valid = True
 
             # add a card
             elif action == '+':
-                print('add card')
                 self.add_card_screen()
                 count = 0
                 #is_valid = True
 
-            # elif action == 'E' or action == 'e':
-            #     print('edit card')
-            #     # go into edit card function
-            #     self.edit_card(card,
-            #     #is_valid = True
-            #     count = 0
+            elif action == 'F' or action =='f':
+                self.filter_card_screen(self._username)
+                count = 0
+
+            elif action == '>>':
+                self.trade_card_screen()
+                count = 0
 
             elif action == '++':
-                print('add a new collection')
                 self.add_new_collection()
                 # go into add a new collection
                 count = 0
@@ -74,45 +123,55 @@ class PokemonTracker:
     def view_collections(self):
         '''
         Allows the user to view their collections
-        * WILL CALL MICROSERVICE FOR [COLLECTIONS] HERE *
+        * WILL CALL MICROSERVICE FOR [COLLECTIONS] HERE * since this changes
         :return:
         '''
 
+
         is_valid = False
         count = 0
+        list_collections = self.get_data_microservice(self._username)
+        if list_collections is None or list_collections == []:
+            print("\n**No collections to view**")
+            return
+
+        self._collections = list_collections
         while is_valid is False:
             if count == 0:
 
                 print()
                 # call [COLLECTION] microservice here to retrieve collection info
-                print('[COLLECTIONS]\n')
-                # for i in range(len(collections)):
-                #     name = collections[i]['name']
-                #     print(f'({i+1}) {name}')
-                for i in range(len(self._collections)):
-                    name = self._collections[i].get_name()
-                    print(f'({i+1}] {name}')
+                print('[COLLECTIONS]--------------------------------------\n')
+
+                # display all collections
+                for i in range(len(list_collections)):
+                    name = self._collections[i]["collection_name"]
+                    print(f'({i+1}) {name}')
                 print('\n(other options)')
                 print("'H' to return HOME")
                 print("'D' to delete a collection\n")
                 count = 1
 
         # loop until a valid input
-
+            print("*collections are CASE SENSITIVE*")
             action = input("Please select a collection: ")
             if action == 'H' or action == 'h':
                 is_valid = True
                 return  # goes back to the homepage
 
-            # call [COLLECTION] microservice here to actually delete the collection
+            # call [COLLECTION] microservice here to actually delete the collection from json
             elif action == 'D' or action == 'd':
                 action_delete = input("Which would you like to delete? ")
-                for collection in collections:
-                    if action_delete == collection.get_name():
+                for collection in self._collections:
+                    if action_delete == collection["collection_name"]:
                         action_check = input('Are you sure you want to delete this collection"\n'
                                              'There is no undoing this (Y/N) ')
                         if action_check == 'Y' or action_check == 'y':
-                            collections.remove(collection)
+
+                            # send
+                            self._collections.remove(collection)
+                            update = self._collections
+                            self.update_data_microservice(self._username, update)   # needed to update json file
                             print('Collection deleted')
                             count = 0
                         else:
@@ -121,14 +180,8 @@ class PokemonTracker:
 
             # go into the collection to view # call [COLLECTION] microservice to return info to view the selection
             else:
-                # for collection in collections:
-                #     if action == collection["name"]:
-                #         action_view = self.view_single_collection(collection)
-                #         if action_view == 'h' or action_view == 'H':
-                #             return # go back home from viewing
-                #         count = 0
                 for collection in self._collections:
-                    if action == collection.get_name():
+                    if action == collection["collection_name"]:
                             action_view = self.view_single_collection(collection)
                             if action_view == 'h' or action_view == 'H':
                                 return # go back home from viewing
@@ -150,32 +203,45 @@ class PokemonTracker:
 
         while is_valid is False:
             if count == 0:
-                # print(f'\n[{collection["name"]}]\n')
-                # card_list = collection["cards"]
-                # # iterate through and print all the card names
-                # for i in range(len(card_list)):
-                #     print(f'({i+1}) {card_list[i]["name"]}')
-
-                print(f'\n[{collection.get_name()}]')
-                card_list = collection.get_cards()
+                print(f'\n[{collection["collection_name"]}]-----------------------------------\n')
+                card_list = collection["card_list"]
                 # iterate through and print all the card names
                 for i in range(len(card_list)):
-                    print(f'({i+1}) {card_list[i].card_name}')
-
-
+                    print(f'({i+1}) {card_list[i]["card_name"]}')
 
                 print('\n(options)')
                 print("'H' to return HOME\n"
                       "'C' to return to COLLECTIONS\n")
 
-
+            print("*card names are CASE SENSITIVE*")
             action = input("\nPlease select a card: ")
             action_view_info = None
-            for card in card_list:
-                if action == card.card_name:
-                    action_view_info = self.view_card_info_screen(card, collection)
-                    if action_view_info == 'H' or action_view_info == 'h':
-                        return action_view_info
+
+            # to account for multiple cards of same name
+            card_count = 0
+            sub_card_list = []
+            show_card = None
+
+            for card in card_list: # what about multiple cards with same name?? make a smaller list and choose one YEAH!!!
+                if action == card["card_name"]:
+                    card_count += 1
+                    if card_count == 1:
+                        unique = True
+                        show_card = card
+                        sub_card_list.append(show_card)
+                    elif card_count > 1:
+                        unique = False
+                        sub_card_list.append(card)
+
+            if card_count == 1:
+                action_view_info = self.view_card_info_screen(show_card, collection)
+                if action_view_info == 'H' or action_view_info == 'h':
+                    return action_view_info
+
+            elif card_count > 1:
+                action_view_info = self.sub_collection(sub_card_list, collection)
+                if action_view_info == 'H' or action_view_info == 'h':
+                    return action_view_info
 
             # if the user wants to return to the collection from viewing a card
             if action_view_info == 'C' or action_view_info == 'c':
@@ -198,24 +264,22 @@ class PokemonTracker:
 
 
 
-    def display_card_info(self, card, collection):
+    def display_card_info(self, card):
         '''
         prints all of a card's info
         :param card:
         :return:
         '''
-        start = timeit.timeit()
-        print(f'\n[{card.card_name}]')
 
-        print(f'\nCollection: {card.collection_name}')
-        print(f'\nSet: {card.set_name}')
-        print(f'Type: {card.card_type}')
-        print(f'Rarity: {card.card_rarity}')
-        print(f'Market Price: {card.market_price}')
-        print(f'Path to Image: {card.image_path}')
-        print(f'\nAdditional Comments: {card.comments}')
-        end = timeit.timeit()
-        print(end-start)
+        print(f'\n[{card["card_name"]}]----------------------------------------------')
+
+        print(f'\nCollection: {card["collection_name"]}')
+        print(f'\nSet: {card["set_name"]}')
+        print(f'Type: {card["card_type"]}')
+        print(f'Rarity: {card["card_rarity"]}')
+        print(f'Market Price: {card["market_price"]}')
+        print(f'Path to Image: {card["image_path"]}')
+        print(f'Additional Comments: {card["comments"]}')
 
 
     def view_card_info_screen(self, card, collection):
@@ -226,18 +290,7 @@ class PokemonTracker:
         :return:
         '''
 
-
-
-        # displays the card info
-        # print(f'\n[{card["name"]}]')
-        #
-        # print(f'\nSet: {card["set"]}')
-        # print(f'Type: {card["type"]}')
-        # print(f'Rarity: {card["rarity"]}')
-        # print(f'Market Price: {card["market price"]}')
-        # print(f'Path to Image: {card["path to image"]}')
-        # print(f'\nAdditional Comments: {card["additional comments"]}')
-        self.display_card_info(card, collection)
+        self.display_card_info(card)
 
         # shows the user's options
         print('\n(options)')
@@ -257,11 +310,11 @@ class PokemonTracker:
             if action == "I" or action == 'i':
                 #is_valid = False
                 # follow the path to show the image
-                if card.image_path == '':
-                    print("Image not found!")
+                if card["image_path"] == '':
+                    print("No image provided!")
                 else:
                     try:
-                        with Image.open(card.image_path) as img:
+                        with Image.open(card["image_path"]) as img:
                             img.show()
                     except IOError:
                         print("Image not found!")
@@ -279,8 +332,11 @@ class PokemonTracker:
                 action_delete = input('\nThere is no undoing this (Y/N) ')
                 if action_delete == 'Y' or action_delete == 'y':
                     # delete card from list in collection
-                    #collection["cards"].remove(card)
-                    collection.get_cards().remove(card)
+                    collection["card_list"].remove(card)
+
+                    # self._collections is updated, now update json file here
+                    self.update_data_microservice(self._username, self._collections)
+
                     print('Card deleted')
                     go_back = True
                     #is_valid = True
@@ -294,7 +350,7 @@ class PokemonTracker:
 
             # edit card info
             elif action == 'E' or action == 'e':
-                self.edit_card(card, collection)
+                self.edit_card(card)
                 action = 'h'
                 return action # go back home
 
@@ -306,18 +362,21 @@ class PokemonTracker:
         * will use [COLLECTION] microservice
         '''
 
-        print("\n[ADD CARD]")
+        print("\n[ADD CARD]---------------------------------------")
         added_card = self.new_card()
-        collection_name = added_card.get_collection()
+        collection_name = added_card["collection_name"]
 
         # find the matching collection in collections, if collection is found, add it to the list of cards
         for collection in self._collections:
-            if collection.get_name() == collection_name:
-                collection.add_card(added_card)
+            if collection["collection_name"] == collection_name:
+                collection["card_list"].append(added_card)
 
                 # need to actually find the collection based off the name
-                print(f'\nCard added to {collection.get_name()}!')
-                self.display_card_info(added_card, collection)
+                print(f'\nCard added to {collection["collection_name"]}!')
+                self.display_card_info(added_card)
+                # add card to the json file with microservice
+                update = self._collections
+                self.update_data_microservice(self._username, update)
 
         print("\n(options)\n"
               "'E' to EDIT, '+' to ADD another card, 'H' to return HOME")
@@ -343,86 +402,179 @@ class PokemonTracker:
         card_name = input("Card Name: ")
 
         # make user input a valid collection
-        is_valid = False
-        while is_valid is False:
-            collection_name = input("Collection Name: ")
-            for i in range(len(self._collections)):
-                if collection_name in self._collections[i].get_name():
-                    is_valid = True
-            if is_valid is False:
-                print("Please input an existing collection!")
+        collection_name = self.collection_validation(False)
+
 
         set_name = input("Set Name: ")
         card_type = input("Type: ")
         card_rarity = input("Rarity: ")
-        market_price = input("Market Price: ")
+
+        # only float values are allowed
+        market_price = self.market_price_validation(False)
+
+
         image_path = input("Path to Image: ")
         comments = input("\nAdditional Comments: ")
 
-        new_card = Card(card_name, collection_name, set_name, card_type, card_rarity,
-                        market_price, image_path, comments)
-
+        new_card = {
+            "card_name": card_name,
+            "collection_name": collection_name,
+            "set_name": set_name,
+            "card_type": card_type,
+            "card_rarity": card_rarity,
+            "market_price": market_price,
+            "image_path": image_path,
+            "comments": comments
+        }
         return new_card
 
 # handles the edit card
 
-    def edit_card(self, card, collection):
+    def edit_card(self, card):
         '''
         Allows the user to edit a card info
         :return:
         '''
 
         is_valid = False
+        print("\n[EDIT CARD]-----------------------------------------\n")
 
         while is_valid is False:
-            self.display_card_info(card, collection)
+            self.display_card_info(card)
             print("'H' to return HOME")
             parameter = input("Please enter a parameter to edit or A for all: ")
             parameter = parameter.lower()  # so  case doesn't matter
 
             # change the name
             if parameter == 'name':
-                card.card_name = input('New name: ')
+                card["card_name"] = input('New name: ')
 
-            #!!!! need to physically change this later
+
             if parameter == 'collection':
-                card.card_collection = input('New collection: ')
+                # make user input a valid collection
+                current_collection = card["collection_name"]
+                collection_name = self.collection_validation(False)
+                card["collection_name"] = collection_name
+
+                # need to pass the objects to the function
+                for collection in self._collections:
+                    if current_collection == collection["collection_name"]:
+                        current_collection = collection     # change it to object
+                    elif collection_name == collection["collection_name"]:
+                        collection_name = collection
+
+                # move card to different collection
+                if current_collection != collection_name:
+                    self.move_collection(card, current_collection, collection_name)
 
             if parameter == 'set':
-                card.set_name = input("New set name: ")
+                card["set_name"] = input("New set name: ")
 
             if parameter == 'rarity':
-                card.set_name = input("New rarity: ")
+                card["rarity"] = input("New rarity: ")
 
             if parameter == 'type':
-                card.card_type = input("New type: ")
+                card["card_type"] = input("New type: ")
 
             if parameter == 'market price':
-                card.market_price = input("New market price: ")
+                # only string of float values are allowed
+                market_price = self.market_price_validation(False)
+                card["market_price"] = market_price
 
             if parameter == 'path to image':
-                card.image_path = input("New image path: ")
+                card["image_path"] = input("New image path: ")
 
             if parameter == 'additional comments':
-                card.comments = input("Updated comments: ")
+                card["comments"] = input("Updated comments: ")
 
              # update all the info
             if parameter == 'a':
-                card.card_name = input('New name: ')
-                # !!!! need to physically change this later
-                card.card_collection = input('New collection: ')
-                card.set_name = input("New set name: ")
-                card.set_name = input("New rarity: ")
-                card.card_type = input("New type: ")
-                card.market_price = input("New market price: ")
-                card.image_path = input("New image path: ")
-                card.comments = input("Updated comments: ")
+                card["card_name"] = input('New name: ')
+
+                # make user input a valid collection
+                collection_name = self.collection_validation(False)
+                if current_collection != collection_name:
+                    self.move_collection(card, current_collection, collection_name)
+
+                card["set_name"] = input("New set name: ")
+                card["rarity"] = input("New rarity: ")
+                card["card_type"] = input("New type: ")
+                card["market_price"] = input("New market price: ")
+                card["image_path"] = input("New image path: ")
+                card["comments"] = input("Updated comments: ")
+
+
+            # need to update the json file
+            self.update_data_microservice(self._username, self._collections)
 
             if parameter == 'h':
                 return # return to the view card info state
                 is_valid = True
 
 
+    def filter_card_screen(self, username):
+        """
+        Takes a user input and returns a list of cards filtered by the parameters:
+        :return: displays all the cards that match the parameter
+        """
+        print("[FILTER CARDS]-----------------------------------------------")
+
+        filtered_list = self.find_card(username)
+
+        # display each card
+        print("\n[FILTERED LIST]------------------------------------------------------------------")
+        for i in range(len(filtered_list)):
+            print()
+            print(f'[{i+1}] ------------ V V V V V V V V V V V --------------')
+            self.display_card_info(filtered_list[i])
+
+        print("-----------------------------------------------------------------------------------")
+        return
+
+    def find_card(self, username):
+        print("Please enter...\n")
+        name = input("Card Name: ")
+        card_type = input("Type: ")
+        rarity = input("Rarity: ")
+        collection = input("Collection: ")
+        set_name = input("Set: ")
+
+        # for a valid order input
+        print("\n[For increasing, press enter]\n[For decreasing, enter 'decreasing']")
+        is_valid = False
+        while is_valid is False:
+            order = input("Order: ")
+            order = order.lower()
+
+            if order == '':  # if user presses enter
+                is_valid = True
+            elif order == 'decreasing':
+                is_valid = True
+            else:
+                is_valid = False
+
+        filter = {"card_name": name,
+                  "collection_name": collection,
+                  "set_name": set_name,
+                  "card_type": card_type,
+                  "card_rarity": rarity,
+                  "order": order,
+                  "json_path": f'/Users/ryan/PycharmProjects/CS361_Pokemon_Card_Tracker/{username}.json'
+                  }
+
+        # convert object to bytes with charset UTF-8 and send to microservice
+        filter_string = json.dumps(filter)
+        filter_bytes = filter_string.encode('utf-8')
+        socket.send(filter_bytes)
+
+        # receive the data a string from the microservice
+        message = socket.recv()
+        message = message.decode('utf-8')
+
+        # convert the string into an actual dictionary list to use
+        filtered_list = json.loads(message)
+
+        return filtered_list
 
     # handles adding a new collection -------------------------------
     def add_new_collection(self):
@@ -438,8 +590,6 @@ class PokemonTracker:
                 print('\n[ADD NEW COLLECTION]')
                 print("\n'H' to return HOME\n")
 
-
-
             collection_name = input('Collection Name: ')
             # if the user doesn't input anything, try again or just quit
             if collection_name == 'H' or collection_name == 'h':
@@ -454,8 +604,9 @@ class PokemonTracker:
             # create and add a new collection object
             else:
                 count = 1
-                new_collection = Collection(collection_name)
-                collections.append(new_collection)
+                new_collection = {"collection_name": collection_name, "card_list": []}
+                self._collections.append(new_collection)
+                self.update_data_microservice(self._username, self._collections)
                 print('Collection Added!')
 
                 yes_or_no = False
@@ -470,108 +621,304 @@ class PokemonTracker:
                         continue # reprompt y/n
                 continue
 
+    def sub_collection(self, sub_card_list, collection):
+        """
+        Prompts user to choose one of the cards with duplicate names
+        :param sub_card_list: a list
+        :return:
+        """
+        for i in range(len(sub_card_list)):
+            print(f'({i+1}) {sub_card_list[i]["card_name"]}')
 
-class Card:
-    '''
-    Creates a card object
+        is_valid = False
+        while is_valid is False:
+            action = input('\nWhich card? Please enter a number: ')
+            if action.isnumeric() is False:
+                print("Must be a number!")
+                continue
+
+            # assuming user chooses number i + 1
+            action = int(action) - 1
+            if action > len(sub_card_list) - 1:
+                print("Invalid number!")
+                continue
+            else:
+                action = self.view_card_info_screen(sub_card_list[action], collection)
+                return action
+
+    def move_collection(self, card, current_collection, new_collection):
+        """
+        moves a card from the current collection to a different collection
+        :param current_collection:
+        :param new_collection:
+        :return:
+        """
+        # delete the card from the current collection
+        if card in current_collection["card_list"]:
+            current_collection["card_list"].remove(card)
+            new_collection["card_list"].append(card)
+            # self._collections is updated, now update json file here
+            self.update_data_microservice(self._username, self._collections)
+
+
+        # add the card to the new collection
+    def micro_request(self, action):
+        """
+        Makes a request from a microservice. To be used in multiple functions
+        :return: a decoded message from the microservice
+        """
+        socket.send_string(action)
+        message = socket.recv()
+        return message.decode()
+
+    def market_price_validation(self, is_valid):
+        """
+        Takes the user input for the market price and validates it
+        :return: string market price
+        """
+        while is_valid is False:
+            market_price = input("Market Price: ")
+            # check if the input can be a float
+            is_valid = is_float(market_price)
+        # if input can be a float, exit the while loop and convert to float
+        market_price = float(market_price)
+        # convert to string to work with microservice
+        return str(market_price)
+
+    def collection_validation(self, is_valid):
+        """
+        Takes the user input for the collection and validates it
+        :return: string collection name
+        """
+        while is_valid is False:
+            collection_name = input("Collection Name: ")
+            for i in range(len(self._collections)):
+                if collection_name == self._collections[i]["collection_name"]:
+                    return collection_name
+            if is_valid is False:
+                print("Please input an existing collection!")
+
+
+    def trade_card_screen(self):
+        """
+        Screen prompting user to trade cards
+        :return: None
+        """
+        print("\n[TRADE CARD]------------------------------------------------------------------")
+        print("*At any time, you may enter 'H' to return to Homepage*")
+
+        # sends the current username for process in trading microservice
+        socket_4.send_json((1, self._collections))
+        socket_4.recv()
+
+        while True:
+            user_trade = input("\nWith who would you like to trade with? ")
+
+            if user_trade == 'H' or user_trade == 'h':
+                return                                                      # return to Homepage
+
+            # so user does not switch cards with themselves
+            if user_trade == self._username:
+                print('Cannot trade with yourself!')
+
+            else:
+                # validate that user to trade with exists by connect with user microservice
+                socket_3.send_json((1, user_trade))                             # 1 = id for searching for user
+                message = socket_3.recv()
+                message = message.decode()
+
+                if message == 'User not found!':
+                    print(message)
+                    continue
+                if message == 'Found':
+                    print('User found!')
+
+                    # get the user_trade data and to trading microservice
+                    user_trade_data = self.get_data_microservice(user_trade)
+
+                    # check if user has anything to trade
+                    if user_trade_data == []:
+                        print('User has no cards to trade!')
+                        return
+
+                    count = 0
+                    for collection in user_trade_data:
+                        if collection["card_list"] != []:
+                            count += 1
+
+                    if count == 0:
+                        print('User has no cards to trade!')
+                        return
+
+                    socket_4.send_json((2, user_trade_data))
+                    socket_4.recv()
+                    self.trade_card(user_trade)
+                    break
+        return
+
+    def find_card_to_trade(self, username):
+        """
+        Allows the user to trade a card with provided user
+        :param username: The user of which finding a card to trade
+        :return: card
+        """
+
+        # use filter fx to find the card to trade
+        while True:
+            print(f"\nPlease input the following info for the card from [{username}] you would like to trade.")
+            filtered_list = self.find_card(username)
+            if filtered_list == []:
+                print('Card not found!')
+
+            elif len(filtered_list) == 1:           # 1 card found with the parameters
+                card = filtered_list[0]
+                print(f'Trading [{card["card_name"]}]...')
+                break
+
+            # more than one card found with the parameters, let user choose
+            elif len(filtered_list) > 1:
+                print(f"\n{len(filtered_list)} cards found")
+                for i in range(len(filtered_list)):
+                    print(f"[{i+1}] {filtered_list[i]['card_name']}")
+                action = -1
+                while action not in range(1, len(filtered_list)+1):         # loop for valid input
+                    try:
+                        action = input("Please choose a card to trade: ")
+                        action = int(action)
+                    except ValueError:
+                        print('Please input an integer')
+                card = filtered_list[action-1]
+                print(f'Trading [{card["card_name"]}]...')
+                break
+        return card
+
+    def trade_card(self, user_trade):
+        """
+        Allows the user to trade with another user
+        :param user_trade:
+        :return:
+        """
+        # find cards to trade for both users
+        card_1 = self.find_card_to_trade(self._username)
+        card_2 = self.find_card_to_trade(user_trade)
+
+        # send to trading microservice for processing
+        socket_4.send_json((3, (card_1, card_2)))
+        message = socket_4.recv_json()
+        update_1, update_2 = message[0], message[1]
+
+        # update the collections of both users
+        self._collections = update_1
+        self.update_data_microservice(self._username, self._collections)
+        self.update_data_microservice(user_trade, update_2)
+        print('Trade successful!')
+        return
+def is_float(num):
+    """
+    Converts the number into a float and returns the number if it is possible and False if not
+    :param num:
     :return:
-    '''
-    def __init__(self, card_name='', collection_name='', set_name='', card_type='', card_rarity='',
-                 market_price='', image_path='', comments=''):
-        # * WILL CHANGE THIS TO BE HANDLED BY A MICROSERVICE LATER *
-        self.card_name = card_name
-        self.collection_name = collection_name
-        self.set_name = set_name
-        self.card_type = card_type
-        self.card_rarity = card_rarity
-        self.market_price = market_price
-        self.image_path = image_path
-        self.comments = comments
+    """
+    try:
+        num = float(num)
+        is_valid = True
+        return True
+    except ValueError:
+        print('Please only enter numbers with/without a decimal. If unsure, enter 0')
+        return False
+    except SyntaxError:
+        print('Please only enter numbers with/without a decimal. If unsure, enter 0')
+        return False
 
+def user_validation():
+    """
+    Validates a user by calling the user microservice
+    :return: a string username, string path_json
+    """
+    is_valid = False
+    while is_valid is False:
+        username = input("Please enter your username or 'Q' to quit: ")
 
+        # if user doesn't input anything, reprompt
+        if len(username) < 1:
+            continue
 
-    def get_collection(self):
-        return self.collection_name
+        # quit
+        if username == 'q' or username == 'Q':
+            return username
 
-    #def edit_card(self):
+        else:
+            # call microservice to see if valid
+            socket_3.send_json((1, username))
+            message = socket_3.recv()
+            message = message.decode()
 
+            if message == 'User not found!':
+                # would you like to create a new user?
+                print(message)
+                while True:
+                    action = input('Would you like to create a new user? (Y/N) ')
+                    action = action.lower()
+                    if action == 'n':
+                        break
+                    elif action == 'y':
+                        new_username = make_username()
+                        return new_username
+                    else:
+                        continue
 
+            elif message == 'Found':
+                is_valid = True
+                return username
 
+def make_username():
+    """
+    Walks through making a new username
+    :return: string username, json_path of username
+    """
+    print("\n[CREATE NEW USER]------------------------------\n"
+          "\nFor a new username, no spaces are not allowed\n"
+          "Usernames are NOT case sensitive.\n")
 
-# will change to be handled by microservice later
-class Collection:
-    '''
-    Makes a collection object with a name and list of card objects
-    '''
+    while True:
+        new_username = input("Please enter a new username: ")
+        if ' ' in new_username:
+            print('No spaces allowed!')
+            continue
 
-    # have card_list parameter for now
-    def __init__(self, collection_name, card_list=[]):
-        self._name = collection_name
-        self._cards = card_list
+        elif new_username is None:
+            continue
 
-    def get_name(self):
-        return self._name
-
-    def add_card(self, card):
-        '''
-        Adds a card to the collection
-        :param card:
-        :return:
-        '''
-        self._cards.append(card)
-
-    def get_cards(self):
-        '''
-        Returns the list of card objects
-        :return:
-        '''
-        return self._cards
-
+        else:
+            socket_3.send_json((2, new_username))
+            message = socket_3.recv()               # new username created
+            message = message.decode()
+            if message == 'Name already taken.':
+                continue
+            else:
+                print(message)
+                return new_username
 
 #-----------------------------------------
 
 
 
 
-
-# data for sprint1
-# card_1 = {'name': 'Umbreon VMAX',
-#           'collection': 'My Collection',
-#           'set': 'Evolving Skies',
-#           'type': 'dark',
-#           'rarity': 'Ultra Rare',
-#           'market price': '$1640',
-#           'path to image': 'URL',
-#           'additional comments': 'Love this card!'
-#           }
-
-card_1 = Card("Umbreon VMAX", 'My Collection', 'Evolving Skies', 'dark',
-              'Ultra Rare', '$1640',
-              '/users/ryan/documents/Pokemon_Tracker/Umbreon_vmax.jpg',
-              'Love this Card')
-
-# my_collection = {'name': 'My Collection', 'cards': [card_1]}
-# my_watchlist = {'name': 'My WatchList'}
-# the_rarest_cards = {'name': 'The Rarest Cards'}
-# little_brothers_cards = {'name': "Little Brother's Cards"}
-my_collection = Collection('My Collection', [card_1])
-my_watchlist = Collection('My WatchList')
-the_rarest_cards = Collection('The Rarest Cards')
-little_brothers_cards = Collection("Little Brother's Cards")
-
-
-
-collections = [my_collection, my_watchlist, the_rarest_cards, little_brothers_cards]
-
 # Welcome page
 print("Welcome to the pokemon card collection app! \nHere you can keep track and organize all the "
         "cards you've collected.\n\n")
-username = input("Please enter your username or 'Q' to quit: ")
+
+
+username = user_validation()
+
+# make a username validation function here
 if username == 'Q' or username == 'q':
     print("See you next time!")
 
-# enter the Home Page
+# enter the Home Page if user file found
 else:
+    with open(f'{username}.json', 'r') as infile:
+        collections = json.load(infile)
     my_tracker = PokemonTracker(username, collections)
     my_tracker.homepage()
 

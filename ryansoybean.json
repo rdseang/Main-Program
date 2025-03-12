@@ -1,0 +1,42 @@
+[
+    {
+        "collection_name": "My Collection",
+        "card_list": [
+            {
+                "card_name": "Flareon",
+                "collection_name": "My Collection",
+                "set_name": "Jungle",
+                "card_type": "Fire",
+                "card_rarity": "Rare",
+                "market_price": "200.0",
+                "image_path": "",
+                "comments": "looks good"
+            },
+            {
+                "card_name": "Moltres",
+                "collection_name": "My Collection",
+                "set_name": "Base Set",
+                "card_type": "Fire",
+                "card_rarity": "",
+                "market_price": "100.0",
+                "image_path": "",
+                "comments": ""
+            }
+        ]
+    },
+    {
+        "collection_name": "Traded Cards",
+        "card_list": [
+            {
+                "card_rarity": "Amazing Rare",
+                "comments": "",
+                "set_name": "Vivid Voltage",
+                "image_path": "",
+                "card_name": "Jirachi",
+                "market_price": "15.0",
+                "card_type": "Psychic",
+                "collection_name": "Traded Cards"
+            }
+        ]
+    }
+]
